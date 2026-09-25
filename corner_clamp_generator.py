@@ -71,6 +71,15 @@ def parse_args(argv=None):
         default=0.1,
         help="Press-fit rib depth into bore from wall (mm)",
     )
+    parser.add_argument(
+        "--z-clearance",
+        type=float,
+        default=1.0,
+        help=(
+            "Vertical gap at the top of the inner piece; also lowers "
+            "inner magnet pockets by this amount (mm)"
+        ),
+    )
     args, _unknown = parser.parse_known_args(argv)
     return args
 
@@ -249,11 +258,12 @@ def main(argv=None):
     magnet_diameter = args.magnet_diameter
     membrane_thickness = args.membrane_thickness
     rib_thickness = args.rib_thickness
+    z_clearance = args.z_clearance
 
     base_arm_width = height - base_thickness
     inner_start = wall_thickness + clearance
     inner_arm_length = arm_length - inner_start
-    inner_height = height - base_thickness
+    inner_height = height - base_thickness - z_clearance
     magnet_depth = wall_thickness - membrane_thickness
     magnet_pocket_start = wall_thickness - magnet_depth - membrane_thickness
     outer_corner_chamfer = wall_thickness
@@ -352,16 +362,21 @@ def main(argv=None):
 
     inner_far_x = inner_start + wall_thickness
     inner_far_y = inner_start + wall_thickness
+    inner_magnet_z = MAGNET_Z - z_clearance
 
     inner_x_magnet = magnet_pocket(
-        (inner_far_x - magnet_pocket_start, MAGNET_CENTER, MAGNET_Z),
+        (
+            inner_far_x - magnet_pocket_start,
+            MAGNET_CENTER,
+            inner_magnet_z,
+        ),
         (-1.0, 0.0, 0.0),
         magnet_diameter,
         magnet_depth,
         rib_thickness,
     )
     inner_y_magnet = magnet_pocket(
-        (MAGNET_CENTER, inner_far_y - magnet_pocket_start, MAGNET_Z),
+        (MAGNET_CENTER, inner_far_y - magnet_pocket_start, inner_magnet_z),
         (0.0, -1.0, 0.0),
         magnet_diameter,
         magnet_depth,

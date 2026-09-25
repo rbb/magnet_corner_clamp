@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "corner-clamp"
+version = "0.1.0"
+description = "Parametric FreeCAD model for a two-piece 90 degree corner clamp."
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.scripts]
+corner-clamp-generator = "corner_clamp_generator:cli"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["corner_clamp_generator.py"]

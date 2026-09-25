@@ -4,16 +4,74 @@ import argparse
 import math
 import os
 import shlex
+import shutil
+import subprocess
 import sys
 import tempfile
 
-import FreeCAD as App
-import OfflineRenderingUtils
-import Part
-from pivy import coin
-
-
 OUTPUT = "Corner_Clamp.FCStd"
+
+App = None
+Part = None
+OfflineRenderingUtils = None
+coin = None
+
+
+def _import_freecad():
+    """Load FreeCAD bindings (not available in a normal system Python)."""
+    global App, Part, OfflineRenderingUtils, coin
+    if App is not None:
+        return
+    import FreeCAD as App
+    import OfflineRenderingUtils
+    import Part
+    from pivy import coin
+
+
+def _find_freecad_cmd():
+    """Return a FreeCAD headless launcher on PATH, if any."""
+    for name in ("freecad.cmd", "FreeCADCmd", "freecadcmd"):
+        path = shutil.which(name)
+        if path:
+            return path
+    return None
+
+
+def _run_under_freecad(script_argv):
+    """Re-run this script under FreeCAD's Python (e.g. from a venv CLI)."""
+    freecad = _find_freecad_cmd()
+    if freecad is None:
+        print(
+            "FreeCAD is not available in this Python environment and "
+            "freecad.cmd was not found on PATH.",
+            file=sys.stderr,
+        )
+        print(
+            "Install FreeCAD or run: freecad.cmd "
+            f"{os.path.abspath(__file__)} ...",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    script_path = os.path.abspath(__file__)
+    cmd = [freecad, script_path]
+    if script_argv:
+        cmd.extend(["--pass", shlex.join(script_argv)])
+    completed = subprocess.run(cmd, check=False)
+    sys.exit(completed.returncode)
+
+
+def _freecad_running_this_file():
+    """True when FreeCADCmd is executing this file (not a plain import)."""
+    this_path = os.path.abspath(__file__)
+    this_name = os.path.basename(this_path)
+    for arg in sys.argv[1:]:
+        if arg in ("--pass",):
+            continue
+        if os.path.abspath(arg) == this_path:
+            return True
+        if os.path.basename(arg) == this_name:
+            return True
+    return False
 
 
 def _script_argv(argv):
@@ -40,8 +98,8 @@ def _script_argv(argv):
     return out
 
 
-def parse_args(argv=None):
-    """Return CLI overrides for overall and magnet-pocket dimensions."""
+def _build_parser():
+    """Return the corner-clamp CLI argument parser."""
     parser = argparse.ArgumentParser(
         description="Generate corner clamp geometry (mm).",
     )
@@ -102,7 +160,12 @@ def parse_args(argv=None):
             "inner magnet pockets by this amount (mm)"
         ),
     )
-    args, _unknown = parser.parse_known_args(_script_argv(argv))
+    return parser
+
+
+def parse_args(argv=None):
+    """Return CLI overrides for overall and magnet-pocket dimensions."""
+    args, _unknown = _build_parser().parse_known_args(_script_argv(argv))
     return args
 
 
@@ -287,7 +350,12 @@ def add_properties(
 
 def main(argv=None):
     """Build the corner clamp document and save OUTPUT."""
-    args = parse_args(argv)
+    script_argv = _script_argv(argv)
+    try:
+        _import_freecad()
+    except ModuleNotFoundError:
+        _run_under_freecad(script_argv)
+    args = parse_args(script_argv)
 
     arm_length = args.arm_length
     height = args.height
@@ -470,5 +538,16 @@ def main(argv=None):
     print("Inner valid:", inner.Shape.isValid())
 
 
-if __name__ in ("__main__", "corner_clamp_generator"):
-    main()
+def cli():
+    """Console entry point (``uv run corner-clamp-generator``, etc.)."""
+    _cli_argv = _script_argv(sys.argv[1:])
+    if "-h" in _cli_argv or "--help" in _cli_argv:
+        _build_parser().parse_args(_cli_argv)
+    else:
+        main()
+
+
+if __name__ == "__main__" or (
+    __name__ == "corner_clamp_generator" and _freecad_running_this_file()
+):
+    cli()

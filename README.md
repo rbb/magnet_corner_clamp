@@ -7,17 +7,50 @@ and an inner L that nests inside. Geometry is built by
 ## Repository files
 
 - `corner_clamp_generator.py` - parametric script (constants at top)
+- `pyproject.toml` - project metadata and `corner-clamp-generator` CLI
 - `Corner_Clamp.FCStd` - generated model (outer and inner solids)
 - `corner_clamp.png` - reference image
 
 ## Requirements
 
-- [FreeCAD](https://www.freecad.org/) with a headless CLI. On Ubuntu via
-  snap, the command is usually `freecad.cmd` (also `snap run freecad.cmd`).
+- Python 3.10+ for CLI help and optional [uv](https://docs.astral.sh/uv/)
+  workflow (`uv sync`, `uv run`).
+- [FreeCAD](https://www.freecad.org/) with a headless CLI to build geometry.
+  On Ubuntu via snap, the command is usually `freecad.cmd` (also
+  `snap run freecad.cmd`).
+
+FreeCAD provides `FreeCAD`, `Part`, and related modules; they are not
+installed by this project's Python environment.
+
+## CLI help
+
+Show script options (no FreeCAD needed):
+
+```bash
+python corner_clamp_generator.py -h
+```
+
+With uv after `uv sync`:
+
+```bash
+uv run corner-clamp-generator -h
+uv run corner_clamp_generator.py -h
+```
+
+`freecad.cmd corner_clamp_generator.py -h` prints FreeCAD's own help
+because the launcher handles `-h` before the script runs. Use `python` or
+`uv run` for this script's help.
 
 ## Run the generator
 
-From this directory:
+With uv installed (`uv sync`), the console script re-invokes `freecad.cmd`
+when FreeCAD is not in the venv Python:
+
+```bash
+corner-clamp-generator --arm-length 200 --height 200
+```
+
+Or call FreeCAD directly from this directory:
 
 ```bash
 freecad.cmd corner_clamp_generator.py
@@ -29,17 +62,19 @@ If `freecad.cmd` is not on your PATH:
 snap run freecad.cmd "$(pwd)/corner_clamp_generator.py"
 ```
 
+Pass dimension overrides after the script name, for example:
+
+```bash
+freecad.cmd corner_clamp_generator.py --arm-length 120 --height 50
+```
+
 The script prints saved path, part volumes, and whether each solid is
 valid. Open the resulting `.FCStd` in the FreeCAD GUI to inspect or
 export meshes.
 
-By default, `OUTPUT` in the script is an absolute path
-(`/home/russ/Downloads/Corner_Clamp.FCStd`). Change it to write next to
-the script, for example:
-
-```python
-OUTPUT = "Corner_Clamp.FCStd"
-```
+By default, `OUTPUT` in the script is `Corner_Clamp.FCStd` in the current
+working directory. Change the constant at the top of
+`corner_clamp_generator.py` to write elsewhere.
 
 ## Design defaults
 
@@ -52,6 +87,6 @@ OUTPUT = "Corner_Clamp.FCStd"
 
 ## Customize
 
-Adjust the constants at the top of `corner_clamp_generator.py`, then run
-the generator again. The FCStd includes a `Parameters` object documenting
-key dimensions.
+Adjust the constants at the top of `corner_clamp_generator.py`, or use CLI
+flags from `-h`, then run the generator again. The FCStd includes a
+`Parameters` object documenting key dimensions.

@@ -154,20 +154,37 @@ def magnet_pocket(
     return cutter.cut(rib_solid)
 
 
-def exterior_corner_chamfer_cut(size, height, arm_length):
-    """Remove a 45 deg chamfer on the floor corner opposite the origin."""
-    x = arm_length
-    y = arm_length
+def corner_chamfer_cut(size, height, corner_x, corner_y, z_base):
+    """Remove a 45 deg chamfer; wedge opens toward -X and -Y in plan."""
     wire = Part.makePolygon(
         [
-            App.Vector(x, y, 0),
-            App.Vector(x - size, y, 0),
-            App.Vector(x, y - size, 0),
-            App.Vector(x, y, 0),
+            App.Vector(corner_x, corner_y, z_base),
+            App.Vector(corner_x - size, corner_y, z_base),
+            App.Vector(corner_x, corner_y - size, z_base),
+            App.Vector(corner_x, corner_y, z_base),
         ]
     )
     face = Part.Face(wire)
     return face.extrude(App.Vector(0, 0, height))
+
+
+def interior_corner_chamfer_brace(size, height, corner_x, corner_y, z_base):
+    """45 deg triangular brace; wedge opens toward +X and +Y in plan."""
+    wire = Part.makePolygon(
+        [
+            App.Vector(corner_x, corner_y, z_base),
+            App.Vector(corner_x + size, corner_y, z_base),
+            App.Vector(corner_x, corner_y + size, z_base),
+            App.Vector(corner_x, corner_y, z_base),
+        ]
+    )
+    face = Part.Face(wire)
+    return face.extrude(App.Vector(0, 0, height))
+
+
+def exterior_corner_chamfer_cut(size, height, arm_length):
+    """Remove a 45 deg chamfer on the floor corner opposite the origin."""
+    return corner_chamfer_cut(size, height, arm_length, arm_length, 0.0)
 
 
 def top_right_camera(objects):
@@ -267,6 +284,7 @@ def main(argv=None):
     magnet_depth = wall_thickness - membrane_thickness
     magnet_pocket_start = wall_thickness - magnet_depth - membrane_thickness
     outer_corner_chamfer = wall_thickness
+    inner_corner_chamfer = wall_thickness
 
     doc = App.newDocument("Corner_Clamp")
 
@@ -362,6 +380,15 @@ def main(argv=None):
 
     inner_far_x = inner_start + wall_thickness
     inner_far_y = inner_start + wall_thickness
+    inner_shape = inner_shape.fuse(
+        interior_corner_chamfer_brace(
+            inner_corner_chamfer,
+            inner_height,
+            inner_far_x,
+            inner_far_y,
+            base_thickness,
+        )
+    )
     inner_magnet_z = MAGNET_Z - z_clearance
 
     inner_x_magnet = magnet_pocket(

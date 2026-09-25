@@ -3,6 +3,8 @@
 import argparse
 import math
 import os
+import shlex
+import sys
 import tempfile
 
 import FreeCAD as App
@@ -13,9 +15,29 @@ from pivy import coin
 
 OUTPUT = "Corner_Clamp.FCStd"
 
-# Magnet placement (mm); not exposed on the CLI
-MAGNET_CENTER = 67.0
-MAGNET_Z = 36.0
+
+def _script_argv(argv):
+    """Expand FreeCADCmd ``--pass`` (one token) into normal argparse argv."""
+    if argv is None:
+        argv = sys.argv[1:]
+    out = []
+    idx = 0
+    while idx < len(argv):
+        token = argv[idx]
+        if token == "--pass":
+            idx += 1
+            if idx >= len(argv):
+                break
+            bundled = argv[idx]
+            idx += 1
+            if " " in bundled.strip():
+                out.extend(shlex.split(bundled))
+            else:
+                out.append(bundled)
+            continue
+        out.append(token)
+        idx += 1
+    return out
 
 
 def parse_args(argv=None):
@@ -80,7 +102,7 @@ def parse_args(argv=None):
             "inner magnet pockets by this amount (mm)"
         ),
     )
-    args, _unknown = parser.parse_known_args(argv)
+    args, _unknown = parser.parse_known_args(_script_argv(argv))
     return args
 
 
@@ -285,6 +307,8 @@ def main(argv=None):
     magnet_pocket_start = wall_thickness - magnet_depth - membrane_thickness
     outer_corner_chamfer = wall_thickness
     inner_corner_chamfer = wall_thickness
+    magnet_center = wall_thickness + (arm_length - wall_thickness) * 5 / 8
+    magnet_z = (height + base_thickness) / 2
 
     doc = App.newDocument("Corner_Clamp")
 
@@ -332,14 +356,14 @@ def main(argv=None):
 
     # Straight magnet pockets in each leg, inserted from outside.
     outer_x_magnet = magnet_pocket(
-        (magnet_pocket_start, MAGNET_CENTER, MAGNET_Z),
+        (magnet_pocket_start, magnet_center, magnet_z),
         (1.0, 0.0, 0.0),
         magnet_diameter,
         magnet_depth,
         rib_thickness,
     )
     outer_y_magnet = magnet_pocket(
-        (MAGNET_CENTER, magnet_pocket_start, MAGNET_Z),
+        (magnet_center, magnet_pocket_start, magnet_z),
         (0.0, 1.0, 0.0),
         magnet_diameter,
         magnet_depth,
@@ -389,12 +413,12 @@ def main(argv=None):
             base_thickness,
         )
     )
-    inner_magnet_z = MAGNET_Z - z_clearance
+    inner_magnet_z = magnet_z - z_clearance
 
     inner_x_magnet = magnet_pocket(
         (
             inner_far_x - magnet_pocket_start,
-            MAGNET_CENTER,
+            magnet_center,
             inner_magnet_z,
         ),
         (-1.0, 0.0, 0.0),
@@ -403,7 +427,7 @@ def main(argv=None):
         rib_thickness,
     )
     inner_y_magnet = magnet_pocket(
-        (MAGNET_CENTER, inner_far_y - magnet_pocket_start, inner_magnet_z),
+        (magnet_center, inner_far_y - magnet_pocket_start, inner_magnet_z),
         (0.0, -1.0, 0.0),
         magnet_diameter,
         magnet_depth,

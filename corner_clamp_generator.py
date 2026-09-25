@@ -102,6 +102,7 @@ def _build_parser():
     """Return the corner-clamp CLI argument parser."""
     parser = argparse.ArgumentParser(
         description="Generate corner clamp geometry (mm).",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--arm-length",
@@ -374,7 +375,7 @@ def main(argv=None):
     magnet_depth = wall_thickness - membrane_thickness
     magnet_pocket_start = wall_thickness - magnet_depth - membrane_thickness
     outer_corner_chamfer = wall_thickness
-    inner_corner_chamfer = wall_thickness
+    inner_corner_chamfer = wall_thickness * arm_length / 100.0
     magnet_center = wall_thickness + (arm_length - wall_thickness) * 5 / 8
     magnet_z = (height + base_thickness) / 2
 

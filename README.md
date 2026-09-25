@@ -1,5 +1,7 @@
 # Corner clamp (parametric FreeCAD)
 
+![Corner clamp outer L bracket in FreeCAD](corner_clamp_screenshot.png)
+
 Two-piece 90 degree corner clamp: an outer L with base and side walls,
 and an inner L that nests inside. Geometry is built by
 `corner_clamp_generator.py` and saved as a FreeCAD document.
@@ -9,6 +11,7 @@ and an inner L that nests inside. Geometry is built by
 - `corner_clamp_generator.py` - parametric script (constants at top)
 - `pyproject.toml` - project metadata and `corner-clamp-generator` CLI
 - `Corner_Clamp.FCStd` - generated model (outer and inner solids)
+- `corner_clamp_screenshot.png` - CAD screenshot (see above)
 - `corner_clamp.png` - reference image
 
 ## Requirements

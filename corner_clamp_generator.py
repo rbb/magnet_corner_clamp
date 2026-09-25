@@ -1,3 +1,7 @@
+"""Generate a corner clamp FreeCAD model with configurable dimensions."""
+
+import argparse
+import math
 import os
 import tempfile
 
@@ -9,43 +13,139 @@ from pivy import coin
 
 OUTPUT = "Corner_Clamp.FCStd"
 
-# Overall dimensions (mm)
-ARM_LENGTH = 100.0
-HEIGHT = 60.0
-WALL_THICKNESS = 12.0
-BASE_THICKNESS = 12.0
-BASE_ARM_WIDTH = 42.0
-
-# Nested inner part
-CLEARANCE = 0.4
-INNER_START = WALL_THICKNESS + CLEARANCE
-INNER_ARM_LENGTH = ARM_LENGTH - INNER_START
-INNER_HEIGHT = HEIGHT - BASE_THICKNESS
-
-# Magnet pockets for nominal 10 x 3 mm disc magnets
-MAGNET_DIAMETER = 9.8
-MEMBRANE = 1.0
-#MAGNET_DEPTH = 3.1
-MAGNET_DEPTH = WALL_THICKNESS - MEMBRANE
-MAGNET_POCKET_START = WALL_THICKNESS - MAGNET_DEPTH - MEMBRANE
+# Magnet placement (mm); not exposed on the CLI
 MAGNET_CENTER = 67.0
 MAGNET_Z = 36.0
 
-# Exterior corner chamfer on outer walls (45 deg, square profile)
-OUTER_CORNER_CHAMFER = WALL_THICKNESS
 
-
-def magnet_pocket(base, direction):
-    """Straight press-fit hole leaving MEMBRANE at the mating face."""
-    return Part.makeCylinder(
-        MAGNET_DIAMETER / 2.0,
-        MAGNET_DEPTH,
-        App.Vector(*base),
-        App.Vector(*direction),
+def parse_args(argv=None):
+    """Return CLI overrides for overall and magnet-pocket dimensions."""
+    parser = argparse.ArgumentParser(
+        description="Generate corner clamp geometry (mm).",
     )
+    parser.add_argument(
+        "--arm-length",
+        type=float,
+        default=100.0,
+        help="Overall arm length (mm)",
+    )
+    parser.add_argument(
+        "--height",
+        type=float,
+        default=60.0,
+        help="Overall clamp height (mm)",
+    )
+    parser.add_argument(
+        "--wall-thickness",
+        type=float,
+        default=12.0,
+        help="Main structural wall thickness (mm)",
+    )
+    parser.add_argument(
+        "--base-thickness",
+        type=float,
+        default=12.0,
+        help="Outer-piece base thickness (mm)",
+    )
+    parser.add_argument(
+        "--clearance",
+        type=float,
+        default=0.4,
+        help="Gap between the two pieces (mm)",
+    )
+    parser.add_argument(
+        "--magnet-diameter",
+        type=float,
+        default=10.0,
+        help="Press-fit magnet pocket diameter (mm)",
+    )
+    parser.add_argument(
+        "--membrane-thickness",
+        type=float,
+        default=1.0,
+        help="Material left at each magnet mating face (mm)",
+    )
+    parser.add_argument(
+        "--rib-thickness",
+        type=float,
+        default=0.1,
+        help="Press-fit rib depth into bore from wall (mm)",
+    )
+    args, _unknown = parser.parse_known_args(argv)
+    return args
 
 
-def exterior_corner_chamfer_cut(size, height, arm_length=ARM_LENGTH):
+def _pocket_axis_frame(direction):
+    """Unit axis and perpendicular basis vectors for a pocket bore."""
+    axis = App.Vector(*direction)
+    if axis.Length == 0:
+        raise ValueError("direction must be non-zero")
+    axis.normalize()
+    ref = App.Vector(0, 0, 1)
+    if abs(axis.dot(ref)) > 0.9:
+        ref = App.Vector(0, 1, 0)
+    e1 = ref.cross(axis)
+    e1.normalize()
+    e2 = axis.cross(e1)
+    e2.normalize()
+    return axis, e1, e2
+
+
+def magnet_pocket(
+    base,
+    direction,
+    magnet_diameter,
+    magnet_depth,
+    rib_thickness,
+):
+    """Press-fit bore cut; shallow ribs on the wall reduce effective diameter."""
+    radius = magnet_diameter / 2.0
+    origin = App.Vector(*base)
+    axis, e1, e2 = _pocket_axis_frame(direction)
+    cutter = Part.makeCylinder(radius, magnet_depth, origin, axis)
+    if rib_thickness <= 0:
+        return cutter
+
+    ribs = []
+    for index in range(4):
+        angle = index * math.pi / 2.0
+        radial = e1 * math.cos(angle) + e2 * math.sin(angle)
+        tangent = axis.cross(radial)
+        tangent.normalize()
+        rib = Part.makeBox(magnet_depth, rib_thickness, rib_thickness)
+        orient = App.Matrix(
+            axis.x,
+            radial.x,
+            tangent.x,
+            0,
+            axis.y,
+            radial.y,
+            tangent.y,
+            0,
+            axis.z,
+            radial.z,
+            tangent.z,
+            0,
+            0,
+            0,
+            0,
+            1,
+        )
+        rib_origin = (
+            origin
+            + radial * (radius - rib_thickness)
+            - tangent * (rib_thickness / 2.0)
+        )
+        rib.Placement = App.Placement(rib_origin, App.Rotation(orient))
+        ribs.append(rib)
+
+    rib_solid = ribs[0]
+    for rib in ribs[1:]:
+        rib_solid = rib_solid.fuse(rib)
+    return cutter.cut(rib_solid)
+
+
+def exterior_corner_chamfer_cut(size, height, arm_length):
     """Remove a 45 deg chamfer on the floor corner opposite the origin."""
     x = arm_length
     y = arm_length
@@ -92,23 +192,40 @@ def save_with_gui_view(doc, filename, parts, colors):
     OfflineRenderingUtils.save(doc, filename=filename, colors=colors, camera=camera)
 
 
-def add_properties(obj):
+def add_properties(
+    obj,
+    arm_length,
+    height,
+    wall_thickness,
+    base_thickness,
+    clearance,
+    magnet_diameter,
+    magnet_depth,
+    membrane_thickness,
+    rib_thickness,
+    outer_corner_chamfer,
+):
     dimensions = [
-        ("ArmLength", ARM_LENGTH, "Overall arm length"),
-        ("Height", HEIGHT, "Overall clamp height"),
-        ("WallThickness", WALL_THICKNESS, "Main structural wall thickness"),
-        ("BaseThickness", BASE_THICKNESS, "Outer-piece base thickness"),
-        ("Clearance", CLEARANCE, "Gap between the two pieces"),
+        ("ArmLength", arm_length, "Overall arm length"),
+        ("Height", height, "Overall clamp height"),
+        ("WallThickness", wall_thickness, "Main structural wall thickness"),
+        ("BaseThickness", base_thickness, "Outer-piece base thickness"),
+        ("Clearance", clearance, "Gap between the two pieces"),
     ]
     magnets = [
         ("NominalMagnetDiameter", 10.0, "Nominal disc magnet diameter"),
         ("NominalMagnetThickness", 3.0, "Nominal disc magnet thickness"),
-        ("PocketDiameter", MAGNET_DIAMETER, "Press-fit magnet pocket diameter"),
-        ("PocketDepth", MAGNET_DEPTH, "Magnet pocket depth"),
-        ("MembraneThickness", MEMBRANE, "Material left at each mating face"),
+        ("PocketDiameter", magnet_diameter, "Press-fit magnet pocket diameter"),
+        ("PocketDepth", magnet_depth, "Magnet pocket depth"),
+        ("MembraneThickness", membrane_thickness, "Material left at each mating face"),
+        (
+            "RibThickness",
+            rib_thickness,
+            "Press-fit rib depth into bore from wall",
+        ),
         (
             "OuterCornerChamfer",
-            OUTER_CORNER_CHAMFER,
+            outer_corner_chamfer,
             "45 deg chamfer on outer floor far corner",
         ),
     ]
@@ -120,112 +237,172 @@ def add_properties(obj):
         setattr(obj, name, value)
 
 
-doc = App.newDocument("Corner_Clamp")
+def main(argv=None):
+    """Build the corner clamp document and save OUTPUT."""
+    args = parse_args(argv)
 
-params = doc.addObject("App::FeaturePython", "Parameters")
-params.Label = "Design Parameters (mm)"
-add_properties(params)
-params.addProperty(
-    "App::PropertyString",
-    "Instructions",
-    "Magnets",
-    "Magnet installation note",
-)
-params.Instructions = (
-    "Press one 10 x 3 mm disc magnet into each straight pocket. "
-    "Check polarity before insertion. Each magnet is covered by a 1 mm membrane."
-)
+    arm_length = args.arm_length
+    height = args.height
+    wall_thickness = args.wall_thickness
+    base_thickness = args.base_thickness
+    clearance = args.clearance
+    magnet_diameter = args.magnet_diameter
+    membrane_thickness = args.membrane_thickness
+    rib_thickness = args.rib_thickness
 
-# OUTER PIECE
-# L-shaped floor plus two perpendicular outside walls.
-outer_floor = Part.makeBox(ARM_LENGTH, ARM_LENGTH, BASE_THICKNESS)
-outer_floor = outer_floor.fuse(
-    Part.makeBox(BASE_ARM_WIDTH, ARM_LENGTH, BASE_THICKNESS)
-)
-outer_floor = outer_floor.cut(
-    exterior_corner_chamfer_cut(OUTER_CORNER_CHAMFER, BASE_THICKNESS)
-)
-outer_x_wall = Part.makeBox(WALL_THICKNESS, ARM_LENGTH, HEIGHT)
-outer_y_wall = Part.makeBox(ARM_LENGTH, WALL_THICKNESS, HEIGHT)
-outer_shape = outer_floor.fuse(outer_x_wall).fuse(outer_y_wall)
+    base_arm_width = height - base_thickness
+    inner_start = wall_thickness + clearance
+    inner_arm_length = arm_length - inner_start
+    inner_height = height - base_thickness
+    magnet_depth = wall_thickness - membrane_thickness
+    magnet_pocket_start = wall_thickness - magnet_depth - membrane_thickness
+    outer_corner_chamfer = wall_thickness
 
-# Straight magnet pockets in each leg, inserted from outside.
-outer_x_magnet = magnet_pocket(
-    (MAGNET_POCKET_START, MAGNET_CENTER, MAGNET_Z),
-    (1.0, 0.0, 0.0),
-)
-outer_y_magnet = magnet_pocket(
-    (MAGNET_CENTER, MAGNET_POCKET_START, MAGNET_Z),
-    (0.0, 1.0, 0.0),
-)
-outer_shape = outer_shape.cut(outer_x_magnet.fuse(outer_y_magnet))
+    doc = App.newDocument("Corner_Clamp")
 
-outer = doc.addObject("PartDesign::Feature", "OuterPiece")
-outer.Label = "Outer Piece - L Base and Side Walls"
-outer.Shape = outer_shape.removeSplitter()
-outer.addProperty(
-    "App::PropertyString",
-    "PrintOrientation",
-    "Manufacturing",
-    "Suggested printing orientation",
-)
-outer.PrintOrientation = "Print flat on the L-shaped base."
-OUTER_COLOR = (1.0, 0.72, 0.05)
-if outer.ViewObject:
-    outer.ViewObject.Visibility = True
-    outer.ViewObject.ShapeColor = OUTER_COLOR
+    params = doc.addObject("App::FeaturePython", "Parameters")
+    params.Label = "Design Parameters (mm)"
+    add_properties(
+        params,
+        arm_length,
+        height,
+        wall_thickness,
+        base_thickness,
+        clearance,
+        magnet_diameter,
+        magnet_depth,
+        membrane_thickness,
+        rib_thickness,
+        outer_corner_chamfer,
+    )
+    params.addProperty(
+        "App::PropertyString",
+        "Instructions",
+        "Magnets",
+        "Magnet installation note",
+    )
+    params.Instructions = (
+        "Press one 10 x 3 mm disc magnet into each straight pocket. "
+        "Check polarity before insertion. Each magnet is covered by a "
+        f"{membrane_thickness:g} mm membrane."
+    )
 
-# INNER PIECE
-# Upright L-shaped pusher, nested inside the outer walls.
-inner_x_leg = Part.makeBox(
-    WALL_THICKNESS, INNER_ARM_LENGTH, INNER_HEIGHT, App.Vector(INNER_START, INNER_START, BASE_THICKNESS)
-)
-inner_y_leg = Part.makeBox(
-    INNER_ARM_LENGTH, WALL_THICKNESS, INNER_HEIGHT, App.Vector(INNER_START, INNER_START, BASE_THICKNESS)
-)
-inner_shape = inner_x_leg.fuse(inner_y_leg)
+    # OUTER PIECE
+    # L-shaped floor plus two perpendicular outside walls.
+    outer_floor = Part.makeBox(arm_length, arm_length, base_thickness)
+    outer_floor = outer_floor.fuse(
+        Part.makeBox(base_arm_width, arm_length, base_thickness)
+    )
+    outer_floor = outer_floor.cut(
+        exterior_corner_chamfer_cut(
+            outer_corner_chamfer, base_thickness, arm_length
+        )
+    )
+    outer_x_wall = Part.makeBox(wall_thickness, arm_length, height)
+    outer_y_wall = Part.makeBox(arm_length, wall_thickness, height)
+    outer_shape = outer_floor.fuse(outer_x_wall).fuse(outer_y_wall)
 
-inner_far_x = INNER_START + WALL_THICKNESS
-inner_far_y = INNER_START + WALL_THICKNESS
+    # Straight magnet pockets in each leg, inserted from outside.
+    outer_x_magnet = magnet_pocket(
+        (magnet_pocket_start, MAGNET_CENTER, MAGNET_Z),
+        (1.0, 0.0, 0.0),
+        magnet_diameter,
+        magnet_depth,
+        rib_thickness,
+    )
+    outer_y_magnet = magnet_pocket(
+        (MAGNET_CENTER, magnet_pocket_start, MAGNET_Z),
+        (0.0, 1.0, 0.0),
+        magnet_diameter,
+        magnet_depth,
+        rib_thickness,
+    )
+    outer_shape = outer_shape.cut(outer_x_magnet.fuse(outer_y_magnet))
 
-inner_x_magnet = magnet_pocket(
-    (inner_far_x - MAGNET_POCKET_START, MAGNET_CENTER, MAGNET_Z),
-    (-1.0, 0.0, 0.0),
-)
-inner_y_magnet = magnet_pocket(
-    (MAGNET_CENTER, inner_far_y - MAGNET_POCKET_START, MAGNET_Z),
-    (0.0, -1.0, 0.0),
-)
-inner_shape = inner_shape.cut(inner_x_magnet.fuse(inner_y_magnet))
+    outer = doc.addObject("PartDesign::Feature", "OuterPiece")
+    outer.Label = "Outer Piece - L Base and Side Walls"
+    outer.Shape = outer_shape.removeSplitter()
+    outer.addProperty(
+        "App::PropertyString",
+        "PrintOrientation",
+        "Manufacturing",
+        "Suggested printing orientation",
+    )
+    outer.PrintOrientation = "Print flat on the L-shaped base."
+    outer_color = (1.0, 0.72, 0.05)
+    if outer.ViewObject:
+        outer.ViewObject.Visibility = True
+        outer.ViewObject.ShapeColor = outer_color
 
-inner = doc.addObject("PartDesign::Feature", "InnerPiece")
-inner.Label = "Inner Piece - Filled L Corner"
-inner.Shape = inner_shape.removeSplitter()
-inner.addProperty(
-    "App::PropertyString",
-    "PrintOrientation",
-    "Manufacturing",
-    "Suggested printing orientation",
-)
-inner.PrintOrientation = "Print with the broad L-shaped end face on the build plate."
-INNER_COLOR = (1.0, 0.88, 0.10)
-if inner.ViewObject:
-    inner.ViewObject.Visibility = True
-    inner.ViewObject.ShapeColor = INNER_COLOR
+    # INNER PIECE
+    # Upright L-shaped pusher, nested inside the outer walls.
+    inner_x_leg = Part.makeBox(
+        wall_thickness,
+        inner_arm_length,
+        inner_height,
+        App.Vector(inner_start, inner_start, base_thickness),
+    )
+    inner_y_leg = Part.makeBox(
+        inner_arm_length,
+        wall_thickness,
+        inner_height,
+        App.Vector(inner_start, inner_start, base_thickness),
+    )
+    inner_shape = inner_x_leg.fuse(inner_y_leg)
 
-parts = doc.addObject("App::DocumentObjectGroup", "ClampParts")
-parts.Label = "Printable Parts"
-parts.addObject(outer)
-parts.addObject(inner)
+    inner_far_x = inner_start + wall_thickness
+    inner_far_y = inner_start + wall_thickness
 
-doc.recompute()
-gui_colors = {
-    outer.Name: OUTER_COLOR,
-    inner.Name: INNER_COLOR,
-}
-save_with_gui_view(doc, OUTPUT, [outer, inner], gui_colors)
-print("Saved:", OUTPUT)
-print("Outer volume (mm^3):", round(outer.Shape.Volume, 2))
-print("Inner volume (mm^3):", round(inner.Shape.Volume, 2))
-print("Outer valid:", outer.Shape.isValid())
-print("Inner valid:", inner.Shape.isValid())
+    inner_x_magnet = magnet_pocket(
+        (inner_far_x - magnet_pocket_start, MAGNET_CENTER, MAGNET_Z),
+        (-1.0, 0.0, 0.0),
+        magnet_diameter,
+        magnet_depth,
+        rib_thickness,
+    )
+    inner_y_magnet = magnet_pocket(
+        (MAGNET_CENTER, inner_far_y - magnet_pocket_start, MAGNET_Z),
+        (0.0, -1.0, 0.0),
+        magnet_diameter,
+        magnet_depth,
+        rib_thickness,
+    )
+    inner_shape = inner_shape.cut(inner_x_magnet.fuse(inner_y_magnet))
+
+    inner = doc.addObject("PartDesign::Feature", "InnerPiece")
+    inner.Label = "Inner Piece - Filled L Corner"
+    inner.Shape = inner_shape.removeSplitter()
+    inner.addProperty(
+        "App::PropertyString",
+        "PrintOrientation",
+        "Manufacturing",
+        "Suggested printing orientation",
+    )
+    inner.PrintOrientation = (
+        "Print with the broad L-shaped end face on the build plate."
+    )
+    inner_color = (1.0, 0.88, 0.10)
+    if inner.ViewObject:
+        inner.ViewObject.Visibility = True
+        inner.ViewObject.ShapeColor = inner_color
+
+    parts = doc.addObject("App::DocumentObjectGroup", "ClampParts")
+    parts.Label = "Printable Parts"
+    parts.addObject(outer)
+    parts.addObject(inner)
+
+    doc.recompute()
+    gui_colors = {
+        outer.Name: outer_color,
+        inner.Name: inner_color,
+    }
+    save_with_gui_view(doc, OUTPUT, [outer, inner], gui_colors)
+    print("Saved:", OUTPUT)
+    print("Outer volume (mm^3):", round(outer.Shape.Volume, 2))
+    print("Inner volume (mm^3):", round(inner.Shape.Volume, 2))
+    print("Outer valid:", outer.Shape.isValid())
+    print("Inner valid:", inner.Shape.isValid())
+
+
+if __name__ in ("__main__", "corner_clamp_generator"):
+    main()

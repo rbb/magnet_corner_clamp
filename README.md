@@ -85,8 +85,9 @@ working directory. Change the constant at the top of
 - Magnets: nominal 10 mm diameter x 3 mm thick; one pair per L leg
 - Pockets: straight 9.8 mm diameter x 3.1 mm deep press-fit holes
 - 1 mm membrane at each mating face so magnets cannot touch
-- Inner legs: 0.4 mm clearance on nested sides; outer corner 45 degree
-  chamfer on the square wall profile
+- Inner legs: 0.4 mm clearance on nested sides, under the inner piece
+  (+Z lift), and at the top; outer corner 45 degree chamfer on the square
+  wall profile
 
 ## Customize
 

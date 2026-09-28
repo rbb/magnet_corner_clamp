@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 
 [project.scripts]
 corner-clamp-generator = "corner_clamp_generator:cli"
+corner-clamp-base-gen = "corner_clamp_base_gen:cli"
 
 [tool.hatch.build.targets.wheel]
 only-include = ["corner_clamp_generator.py"]

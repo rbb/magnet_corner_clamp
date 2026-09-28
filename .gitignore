@@ -76,3 +76,4 @@ Thumbs.db
 
 # FreeCAD auto-backups
 *.FCBak
+Corner_Clamp.FCStd

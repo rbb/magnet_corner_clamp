@@ -179,6 +179,19 @@ def parse_args(argv=None):
     return args
 
 
+def output_filename(
+    arm_length: float,
+    height: float,
+    magnet_diameter: float,
+) -> str:
+    """Return the output path with key dimensions in the filename."""
+    stem, extension = os.path.splitext(OUTPUT)
+    dimensions = (
+        f"{arm_length:g}_{height:g}_{magnet_diameter:g}"
+    )
+    return f"{stem}_{dimensions}{extension}"
+
+
 def _pocket_axis_frame(direction):
     """Unit axis and perpendicular basis vectors for a pocket bore."""
     axis = App.Vector(*direction)
@@ -689,8 +702,9 @@ def main(argv=None):
         outer.Name: outer_color,
         inner.Name: inner_color,
     }
-    save_with_gui_view(doc, OUTPUT, [outer, inner], gui_colors)
-    print("Saved:", OUTPUT)
+    output = output_filename(arm_length, height, magnet_diameter)
+    save_with_gui_view(doc, output, [outer, inner], gui_colors)
+    print("Saved:", output)
     print("Outer volume (mm^3):", round(outer.Shape.Volume, 2))
     print("Inner volume (mm^3):", round(inner.Shape.Volume, 2))
     print("Outer valid:", outer.Shape.isValid())

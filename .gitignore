@@ -74,6 +74,7 @@ poetry.lock
 .DS_Store
 Thumbs.db
 
-# FreeCAD auto-backups
+# CAD Files
 *.FCBak
-Corner_Clamp.FCStd
+*.FCStd
+*.stl

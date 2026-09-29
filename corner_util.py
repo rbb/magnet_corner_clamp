@@ -10,6 +10,7 @@ import sys
 import tempfile
 
 App = None
+Mesh = None
 Part = None
 OfflineRenderingUtils = None
 coin = None
@@ -17,10 +18,11 @@ coin = None
 
 def import_freecad():
     """Load FreeCAD bindings (not available in a normal system Python)."""
-    global App, Part, OfflineRenderingUtils, coin
+    global App, Mesh, Part, OfflineRenderingUtils, coin
     if App is not None:
         return
     import FreeCAD as App
+    import Mesh
     import OfflineRenderingUtils
     import Part
     from pivy import coin
@@ -445,6 +447,17 @@ def save_with_gui_view(doc, filename, parts, colors):
     OfflineRenderingUtils.save(
         doc, filename=filename, colors=colors, camera=camera
     )
+
+
+def export_part_stls(fcstd_path, part_objects, tolerance=0.1):
+    """Export one STL per part beside the FCStd file (same dimension stem)."""
+    base, _ = os.path.splitext(fcstd_path)
+    paths = []
+    for obj in part_objects:
+        stl_path = f"{base}_{obj.Name}.stl"
+        Mesh.export([obj], stl_path, tolerance=tolerance)
+        paths.append(stl_path)
+    return paths
 
 
 def add_properties(

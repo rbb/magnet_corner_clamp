@@ -197,7 +197,10 @@ def main(argv=None):
         OUTPUT, arm_length, height, magnet_diameter
     )
     cu.save_with_gui_view(doc, output, [outer, inner], gui_colors)
+    stl_paths = cu.export_part_stls(output, [outer, inner])
     print("Saved:", output)
+    for stl_path in stl_paths:
+        print("Saved:", stl_path)
     print("Outer volume (mm^3):", round(outer.Shape.Volume, 2))
     print("Inner volume (mm^3):", round(inner.Shape.Volume, 2))
     print("Outer valid:", outer.Shape.isValid())

@@ -54,7 +54,7 @@ def main(argv=None):
     inner_magnet_z = inner_start_z + inner_height / 2.0
     inner_far_x = inner_start_xy + wall_thickness
     inner_far_y = inner_start_xy + wall_thickness
-    base_magnet_center = (inner_start_xy + arm_length) / 2.0
+    base_magnet_center = inner_start_xy * 1.2 + (arm_length - inner_start_xy) / 2.0
     base_magnet_depth = base_thickness - membrane_thickness
 
     print("Setting up doc...")

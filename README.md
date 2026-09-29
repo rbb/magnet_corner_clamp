@@ -75,9 +75,20 @@ The script prints saved path, part volumes, and whether each solid is
 valid. Open the resulting `.FCStd` in the FreeCAD GUI to inspect or
 export meshes.
 
-By default, `OUTPUT` in the script is `Corner_Clamp.FCStd` in the current
-working directory. Change the constant at the top of
-`corner_clamp_generator.py` to write elsewhere.
+Each run writes a file in the current working directory. The base name
+comes from `OUTPUT` in the script (for example `Corner_Clamp.FCStd`), but
+the generator inserts three dimension numbers before the extension:
+
+```text
+<stem>_<arm-length>_<height>_<magnet-diameter>.FCStd
+```
+
+All three suffix values are millimeters, matching `--arm-length`,
+`--height`, and `--magnet-diameter`. With defaults you get
+`Corner_Clamp_100_60_10.FCStd`. Wall thickness, clearance, and other
+flags are recorded in the document Comment, not in the filename. Change
+`OUTPUT` at the top of the generator script to use a different stem or
+extension.
 
 ## Design defaults
 
@@ -91,6 +102,53 @@ working directory. Change the constant at the top of
 
 ## Customize
 
-Adjust the constants at the top of `corner_clamp_generator.py`, or use CLI
-flags from `-h`, then run the generator again. The FCStd includes a
-`Parameters` object documenting key dimensions.
+Use CLI flags from `-h`, then run the generator again. Each `.FCStd`
+includes a `Parameters` object with key dimensions. The scripts also set
+document **Comment** metadata to the full CLI invocation (every flag and
+value) used for that build.
+
+## FCStd comments
+
+`.FCStd` files are ZIP archives. The document-level comment lives in
+`Document.xml` inside `<Property name="Comment">`.
+
+Quick grep:
+
+```bash
+unzip -p file.FCStd Document.xml | grep -A 1 'name="Comment"'
+```
+
+XPath with `xmllint` (recommended):
+
+```bash
+unzip -p file.FCStd Document.xml | \
+  xmllint --xpath 'string(//Property[@name="Comment"]/String/@value)' - \
+  2>/dev/null
+```
+
+All object `Label2` strings in the same file:
+
+```bash
+unzip -p file.FCStd Document.xml | \
+  xmllint --xpath '//Property[@name="Label2"]/String/@value' - \
+  2>/dev/null
+```
+
+Headless FreeCAD (uses the document API; slower for batch jobs):
+
+```bash
+freecad.cmd -c "import FreeCAD; doc=FreeCAD.openDocument('file.FCStd'); \
+  print(doc.Comment)"
+```
+
+Document comment plus per-object `Label2`:
+
+```bash
+freecad.cmd -c "import FreeCAD; doc=FreeCAD.openDocument('file.FCStd'); \
+  print('Doc Comment:', doc.Comment); \
+  [print(f'{obj.Name}: {obj.Label2}') for obj in doc.Objects \
+  if hasattr(obj, 'Label2') and obj.Label2]"
+```
+
+For many files in a shell pipeline, `unzip` plus `xmllint` is usually
+faster than starting FreeCAD for each archive.

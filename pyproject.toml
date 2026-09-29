@@ -14,4 +14,8 @@ corner-clamp-generator = "corner_clamp_generator:cli"
 corner-clamp-base-gen = "corner_clamp_base_gen:cli"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["corner_clamp_generator.py"]
+only-include = [
+    "corner_util.py",
+    "corner_clamp_generator.py",
+    "corner_clamp_base_gen.py",
+]
